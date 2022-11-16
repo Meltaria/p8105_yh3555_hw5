@@ -2,7 +2,7 @@
 title: "8105_yh3555_hw5"
 author: "Yuchen Hua"
 date: "2022-11-13"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -103,16 +103,46 @@ homicide_bycase
 ```
 The tibble was rearranged by mutate the cases into total_unsolved and total. To find the proportion, only city_state, total_unsolved and total variable were requried. Thus, only these 3 varibales were selected. 
 
+
 ```{r}
-baltimore = prop.test( homicide_bycase %>% filter(city_state == "Baltimore,MD") %>% pull(total_unsolved),
-                       homicide_bycase %>% filter(city_state == "Baltimore,MD") %>% pull(total_case)) %>%
-  broom::tidy() %>% 
-  select(estimate, conf.low, conf.high)
-baltimore
+propt = function(x,n) {
+  prop.test(x,n) %>%
+    broom::tidy() %>%
+    select(estimate, conf.low, conf.high)
+}
+```
+
+```{r}
+baltimore = homicide_bycase %>%
+  filter(city_state == c("Baltimore,MD"))
+prop_bal = baltimore %>%
+  mutate(bal_prop = map2(.x = total_unsolved, .y = total_case, .f= ~propt(x = .x, n = .y))) %>%
+  unnest(bal_prop) %>%
+  select(-total_unsolved, -total_case)
+prop_bal
 ```
 By using prop.test, aftering pull the total_unsolved and total variable from filterd Baltimore, the proportion was calculated. The Estaimated proportion is 0.646, while confidence interval(0.628, 0.633).
 
 
+```{r}
+prop_city = homicide_bycase %>%
+  mutate(city_prop = map2(.x = total_unsolved, .y = total_case, .f= ~propt(x = .x, n = .y))) %>%
+  unnest(city_prop) %>% 
+  select(-total_unsolved, -total_case)
+prop_city
+```
+
+The plot was created to show the cities' estimates and CIs, together with error bars.
+
+```{r}
+plot_homicide = prop_city %>%
+  ggplot(aes(x=fct_reorder(city_state, -estimate), y=estimate)) + 
+  geom_bar(stat = "identity", fill="lightgreen") + 
+  geom_errorbar(aes(ymin = conf.low, ymax= conf.high)) + 
+  labs(x = "City, State", y = "Proportion", title = "Proportion of unsolved homicide") + 
+  theme(axis.text.x = element_text(angle = 90))
+plot_homicide
+```
 
 
 
