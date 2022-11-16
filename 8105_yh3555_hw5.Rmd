@@ -66,7 +66,7 @@ homicide = homicide %>%
   mutate(city_state = str_c(city, ",", state)) %>%
   mutate(city_state = as.factor(city_state))
 ```
-
+City variable and state variable were combined via str_c() function, seperated by ",". For further manipulate convinience, city_state varibale is changed from character to factor. 
 ```{r}
 total = homicide %>%
   group_by(city_state) %>%
@@ -86,7 +86,7 @@ unsolved = homicide %>%
   mutate(total_unsolved = sum(closed_without_arrest, open_no_arrest)) %>% 
   arrange(desc(total_unsolved))
 ```
-By grouping the city_state with disposition, "closed without arrest" and "Open/No arrest" were filtered. These two types of cases underwent pivot_wider function to be variables so that the number of cases in each city_state can be found via summarize(). The total number of unsolved cases is the the sum of that of `Closed without arrest` and `Open/No arrest`. The na is replaced with 0. 
+By grouping the city_state with disposition, "closed without arrest" and "Open/No arrest" were filtered. These two types of cases underwent pivot_wider function to be variables so that the number of cases in each city_state can be found via summarize(). The total number of unsolved cases is the the sum of that of Closed without arrest and Open/No arrest. The na is replaced with 0. 
 In this tibble, we can find that Chicago, IL still have the most total unsolved cases, to be 4073 cases, with 3686 "Open/No arrest". The second one, Baltimore, MD, have 1825 unsolved cases, with 1673 "Open/No arrest.
 
 ```{r}
@@ -101,7 +101,7 @@ homicide_bycase = homicide %>%
   select(city_state, total_unsolved, total_case)
 homicide_bycase
 ```
-The tibble was rearranged by mutate the cases into total_unsolved and total. To find the proportion, only city_state, total_unsolved and total variable were requried. Thus, only these 3 varibales were selected. 
+The tibble was rearranged by mutate the cases into total_unsolved and total. To find the proportion, only city_state, total_unsolved and total variable were requried. Thus, only these 3 variables were selected. 
 
 
 ```{r}
@@ -111,6 +111,7 @@ propt = function(x,n) {
     select(estimate, conf.low, conf.high)
 }
 ```
+A function of prop.test function was created in order to analyze large number of variables. 
 
 ```{r}
 baltimore = homicide_bycase %>%
@@ -121,8 +122,7 @@ prop_bal = baltimore %>%
   select(-total_unsolved, -total_case)
 prop_bal
 ```
-By using prop.test, aftering pull the total_unsolved and total variable from filterd Baltimore, the proportion was calculated. The Estaimated proportion is 0.646, while confidence interval(0.628, 0.633).
-
+Baltimore's dataset was pulled from the homicide_bycase. The propr function, which had been created before, was used to estimated the proportion. map2 function was used for check the variable and funciton used in this test. From the result, the estimated proportion was found to be 0.646, with a CI (0.628, 0.663). 
 
 ```{r}
 prop_city = homicide_bycase %>%
@@ -131,19 +131,19 @@ prop_city = homicide_bycase %>%
   select(-total_unsolved, -total_case)
 prop_city
 ```
+Similar process was applied to the whole dataset. Each city's estimate propotion and confidence interval was calculated. 
 
-The plot was created to show the cities' estimates and CIs, together with error bars.
 
 ```{r}
 plot_homicide = prop_city %>%
   ggplot(aes(x=fct_reorder(city_state, -estimate), y=estimate)) + 
-  geom_bar(stat = "identity", fill="lightgreen") + 
+  geom_point() + 
   geom_errorbar(aes(ymin = conf.low, ymax= conf.high)) + 
   labs(x = "City, State", y = "Proportion", title = "Proportion of unsolved homicide") + 
   theme(axis.text.x = element_text(angle = 90))
 plot_homicide
 ```
-
+A scatter plot was created via ggplot function. fct_reorder() was used to order the city by estimated proportion. Error bar was make for every point, based on the confidence interval. For a better reading, the x-axis texts were rotated.   
 
 
 ## Problem 3 ##
@@ -158,12 +158,15 @@ ttest = function(n = 30, mean, sd=5){
     select(estimate, p.value)
 }
 ```
+A ttest function was created with a fixed sample size of 30 and standared deviation of 5. The mean can be changed based on input. 
 
-Let's run the mean= 0 for 
+Let's run the mean=0 to generate 5000 datasets. 
 ```{r, cache=TRUE}
 mean_0 = rerun(5000, ttest(mean=0)) %>%
   bind_rows
 ```
+rerun() function was used for this simulation. The created ttest was applied for mean=0. The dataset was obtained by binding the rows. 
+
 
 Let's repeat mean = {1, 2, 3, 4, 5, 6}
 ```{r, cache=TRUE}
@@ -175,12 +178,7 @@ mean_1_6 =
   select(-output) %>%
   unnest(estimate)
 ```
-The dataset with mean from 1 to 6 was created. 
-
-
-
-Make a plot showing the average estimate of μ^
-on the y axis and the true value of μ on the x axis. Make a second plot (or overlay on the first) the average estimate of μ^ only in samples for which the null was rejected on the y axis and the true value of μ on the x axis. Is the sample average of μ^ across tests for which the null is rejected approximately equal to the true value of μ? Why or why not?
+The dataset with mean from 1 to 6 was created with map() function. 
 
 ```{r}
 prop_nullreject = mean_1_6 %>%
@@ -190,16 +188,17 @@ prop_nullreject = mean_1_6 %>%
   group_by(mean) %>%
   summarize(n_reject = sum(reject),
             prop_reject = n_reject / 5000) %>%
-  ggplot(aes(x = mean, y = prop_reject, color = mean)) + geom_point() + labs(title = "Proportion of nll rejected", x = "True Mean", y= "Proportion of reject")
+  ggplot(aes(x = mean, y = prop_reject)) + geom_point() + labs(title = "Proportion of nll rejected", x = "True Mean", y= "Proportion of reject")
 prop_nullreject
 ```
+A plot of times of null rejected vs True mean was created. From the plot, we can found that, with a higher True mean, the portion of rejected times increased and approached to 1 finally. 
 
 ```{r}
 plot_all_mean = 
   mean_1_6 %>%
   group_by(mean) %>%
   summarize(ave_esti = mean(estimate)) %>%
-  ggplot(aes(x = mean, y =ave_esti, color = mean)) + geom_point() +
+  ggplot(aes(x = mean, y =ave_esti)) + geom_point() +
   labs(title ="Average estimate mean vs True mean",
        x = "True mean", y = "Average estimate mean")
 plot_all_mean
@@ -211,7 +210,7 @@ plot_reject_mean =
   filter(p.value < 0.05) %>%
   group_by(mean) %>%
   summarize(ave_esti = mean(estimate)) %>%
-  ggplot(aes(x =mean, y = ave_esti, color = mean)) + geom_point() +
+  ggplot(aes(x =mean, y = ave_esti)) + geom_point() +
   labs(title ="Average rejected estimate mean vs True mean",
        x = "True mean", y = "Average estimate rejected mean")
 plot_reject_mean
@@ -222,5 +221,6 @@ plot_full= plot_all_mean + plot_reject_mean
 plot_full
 ```
 
+From the two-panel plot, the average of mean from the test where the null was rejected was not equal to the true mean. These values were rejected, indicating they may be greatly different from the true mean. 
 
 
