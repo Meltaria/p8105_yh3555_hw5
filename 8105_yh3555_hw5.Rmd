@@ -12,6 +12,9 @@ library(ggplot2)
 library(dbplyr)
 library(p8105.datasets)
 library(viridis)
+library(rvest)
+library(patchwork)
+set.seed(1)
 ```
 
 # Problem 1
@@ -60,7 +63,8 @@ There were 52179 cases recorded from 50 cities. There were total 12 variables pu
 __
 ```{r}
 homicide = homicide %>%
-  mutate(city_state = str_c(city, ",", state))
+  mutate(city_state = str_c(city, ",", state)) %>%
+  mutate(city_state = as.factor(city_state))
 ```
 
 ```{r}
@@ -69,13 +73,123 @@ total = homicide %>%
   summarize(total_homicide = n()) %>% 
   arrange(desc(total_homicide))
 ```
+Among all 51 cities, Chicago has the most number of homicide, to be 5535 and Philadelphi has the second rank, with 3037 homicide. 
 
 ```{r}
 unsolved = homicide %>%
-  group_by(city_state, disposition) %>%
-  filter(! disposition %in% c("Closed by arrest")) %>%
-  summarize(unsolved_case = n()) %>%
-  arrange(desc(unsolved_case))
+  group_by(city_state, disposition) %>% 
+  filter(disposition %in% c("Closed without arrest", "Open/No arrest")) %>% 
+  summarize(case = n()) %>%
+  pivot_wider(names_from = disposition, values_from = case) %>%
+  janitor::clean_names() %>%
+  replace_na(list(closed_without_arrest = 0, open_no_arrest = 0)) %>%
+  mutate(total_unsolved = sum(closed_without_arrest, open_no_arrest)) %>% 
+  arrange(desc(total_unsolved))
+```
+By grouping the city_state with disposition, "closed without arrest" and "Open/No arrest" were filtered. These two types of cases underwent pivot_wider function to be variables so that the number of cases in each city_state can be found via summarize(). The total number of unsolved cases is the the sum of that of `Closed without arrest` and `Open/No arrest`. The na is replaced with 0. 
+In this tibble, we can find that Chicago, IL still have the most total unsolved cases, to be 4073 cases, with 3686 "Open/No arrest". The second one, Baltimore, MD, have 1825 unsolved cases, with 1673 "Open/No arrest.
+
+```{r}
+homicide_bycase = homicide %>%
+  group_by(city_state, disposition) %>% 
+  summarize(case = n()) %>%
+  pivot_wider(names_from = disposition, values_from = case) %>% 
+  janitor::clean_names() %>%
+  replace_na(list(closed_by_arrest =0, closed_without_arrest = 0, open_no_arrest = 0)) %>%
+  mutate(total_unsolved = sum(closed_without_arrest, open_no_arrest),
+         total_case = sum(closed_without_arrest, open_no_arrest,closed_by_arrest)) %>% 
+  select(city_state, total_unsolved, total_case)
+homicide_bycase
+```
+The tibble was rearranged by mutate the cases into total_unsolved and total. To find the proportion, only city_state, total_unsolved and total variable were requried. Thus, only these 3 varibales were selected. 
+
+```{r}
+baltimore = prop.test( homicide_bycase %>% filter(city_state == "Baltimore,MD") %>% pull(total_unsolved),
+                       homicide_bycase %>% filter(city_state == "Baltimore,MD") %>% pull(total_case)) %>%
+  broom::tidy() %>% 
+  select(estimate, conf.low, conf.high)
+baltimore
+```
+By using prop.test, aftering pull the total_unsolved and total variable from filterd Baltimore, the proportion was calculated. The Estaimated proportion is 0.646, while confidence interval(0.628, 0.633).
+
+
+
+
+
+## Problem 3 ##
+__Create the function__
+```{r}
+ttest = function(n = 30, mean, sd=5){
+  data = rnorm(n=30, mean, sd=5)
+  results = t.test(data, conf.level = 0.95)
+  
+  results %>%
+    broom::tidy() %>% 
+    select(estimate, p.value)
+}
+```
+
+Let's run the mean= 0 for 
+```{r, cache=TRUE}
+mean_0 = rerun(5000, ttest(mean=0)) %>%
+  bind_rows
+```
+
+Let's repeat mean = {1, 2, 3, 4, 5, 6}
+```{r, cache=TRUE}
+mean_1_6 = 
+  tibble(mean = c(1, 2, 3, 4, 5, 6)) %>%
+  mutate(
+    output = map(.x =mean, ~rerun(5000, ttest(mean = .x))),
+    estimate = map(output, bind_rows) ) %>%
+  select(-output) %>%
+  unnest(estimate)
+```
+The dataset with mean from 1 to 6 was created. 
+
+
+
+Make a plot showing the average estimate of μ^
+on the y axis and the true value of μ on the x axis. Make a second plot (or overlay on the first) the average estimate of μ^ only in samples for which the null was rejected on the y axis and the true value of μ on the x axis. Is the sample average of μ^ across tests for which the null is rejected approximately equal to the true value of μ? Why or why not?
+
+```{r}
+prop_nullreject = mean_1_6 %>%
+  mutate(
+    reject = ifelse(p.value < 0.05, 1, 0)
+  ) %>%
+  group_by(mean) %>%
+  summarize(n_reject = sum(reject),
+            prop_reject = n_reject / 5000) %>%
+  ggplot(aes(x = mean, y = prop_reject, color = mean)) + geom_point() + labs(title = "Proportion of nll rejected", x = "True Mean", y= "Proportion of reject")
+prop_nullreject
+```
+
+```{r}
+plot_all_mean = 
+  mean_1_6 %>%
+  group_by(mean) %>%
+  summarize(ave_esti = mean(estimate)) %>%
+  ggplot(aes(x = mean, y =ave_esti, color = mean)) + geom_point() +
+  labs(title ="Average estimate mean vs True mean",
+       x = "True mean", y = "Average estimate mean")
+plot_all_mean
+```
+
+```{r}
+plot_reject_mean =
+  mean_1_6 %>%
+  filter(p.value < 0.05) %>%
+  group_by(mean) %>%
+  summarize(ave_esti = mean(estimate)) %>%
+  ggplot(aes(x =mean, y = ave_esti, color = mean)) + geom_point() +
+  labs(title ="Average rejected estimate mean vs True mean",
+       x = "True mean", y = "Average estimate rejected mean")
+plot_reject_mean
+```
+
+```{r}
+plot_full= plot_all_mean + plot_reject_mean
+plot_full
 ```
 
 
